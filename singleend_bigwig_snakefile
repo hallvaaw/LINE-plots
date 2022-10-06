@@ -1,0 +1,86 @@
+with open("/PATH/chip_seq/single_end.txt", "r") as file_:
+    SAMPLES  = file_.read().splitlines()
+
+# SAMPLES = ["SRR341119", "SRR341120", "SRR942470", "SRR942471", "SRR942472", "SRR3316761", "SRR3316762", "SRR3316770", "SRR4011260", "SRR4011261", "SRR4011262", "SRR4011263", "SRR4011264", "SRR4011265"]
+
+rule all:
+    input:
+        expand("/PATH/chip_seq/{sample}.bwig", sample = SAMPLES)
+
+rule trim_files:
+    input:
+        "/PATH/chip_seq/fasta_files/{sample}.fastq"
+    
+    output:
+        "/PATH/chip_seq/{sample}_trimmed.fq",
+        "/PATH/chip_seq/{sample}.fastq_trimming_report.txt",
+    
+    shell:
+        """
+        export PATH=/software/Trimgalore/0.6.4/bin:$PATH
+        trim_galore -o /PATH/chip_seq/ {input}
+        """
+       
+rule bowtie2:
+    input:
+        read="/PATH/chip_seq/{sample}_trimmed.fq"
+
+    output:
+        "/PATH/chip_seq/{sample}.sam"
+    
+    params:
+        index="/PATH/chip_seq/mm9_index"
+
+    shell:
+        """
+        export PATH=/software/miniconda2/bin:$PATH
+        bowtie2 -x {params.index} -q {input.read} -S {output}
+        """
+
+rule sort_sam:
+    input:
+        "/PATH/chip_seq/{sample}.sam"
+
+    output:
+        bam_input="/PATH/chip_seq/{sample}.bam",
+    	bam_sorted="/PATH/chip_seq/{sample}_sorted.bam"
+
+    shell:
+        """
+
+        export PATH=/software/miniconda2/bin:$PATH
+        samtools view {input} -bS > {output.bam_input}
+        samtools sort {output.bam_input} -o {output.bam_sorted}
+        """
+
+rule make_bedgraph:
+    input:
+        sorted_bam_file="/PATH/chip_seq/{sample}_sorted.bam"
+
+    output:
+        bedgraph_input="/PATH/chip_seq/{sample}.bedGraph",
+        bedgraph_sorted="/PATH/chip_seq/{sample}_sorted.bedGraph"
+
+    params:
+        chromsizes="/PATH/chip_seq/mm9.chrom.sizes" 
+
+    shell:
+        """
+        genomeCoverageBed -ibam {input.sorted_bam_file} -bg -g {params.chromsizes} | sort --temporary-directory=/PATH/ -k1,1 -k2,2n > {output.bedgraph_input}
+        sort --temporary-directory=/PATH/ -k1,1 -k2,2n {output.bedgraph_input} > {output.bedgraph_sorted}
+        """
+
+rule make_bigwig:
+    input:
+        bedgraph_sorted="/PATH/chip_seq/{sample}.bedGraph"
+
+    output:
+        bw_files="/PATH/chip_seq/{sample}.bwig"
+
+    params:
+        chromsizes="/PATH/chip_seq/mm9.chrom.sizes" 
+
+    shell:
+        """
+        /home/hallvaaw/bedGraphToBigWig -unc {input.bedgraph_sorted} {params.chromsizes} {output.bw_files} 
+        """
