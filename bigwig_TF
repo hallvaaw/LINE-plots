@@ -1,0 +1,76 @@
+with open("PATH/chip_seq/single_end.txt", "r") as file_:
+    SAMPLES  = file_.read().splitlines()
+
+
+
+rule all:
+    input:
+        expand("PATH/chip_seq/{sample}_MAPQ10.bwig", sample = SAMPLES)
+
+
+rule mapq_filter:
+    input:
+        bam_sorted="PATH/chip_seq/{sample}_sorted.bam"
+
+    output:
+        bam_filtered="PATH/chip_seq/{sample}_sortedMAPQ10.bam"
+
+    shell:
+        """
+        export PATH=/software/miniconda2/bin:$PATH
+        samtools view -bq 10 {input.bam_sorted} > {output.bam_filtered}
+        """
+
+rule peak_call:
+    input:
+        bam_filtered="PATH/chip_seq/{sample}_sortedMAPQ10.bam",
+        bam_input="PATH/chip_seq/SRR1991254_sorted.bam"
+
+    output:
+        pileup_bdg="PATH/chip_seq/macs2_/{sample}_treat_pileup.bdg",
+        control_bdg="PATH/chip_seq/macs2_/{sample}_control_lambda.bdg",
+        broadpeak="PATH/chip_seq/macs2_/{sample}_peaks.broadPeak",
+        gappedpeak="PATH/chip_seq/macs2_/{sample}_peaks.gappedPeak",
+        xls="PATH/chip_seq/macs2_/{sample}_peaks.xls",
+        r_model="PATH/chip_seq/macs2_/{sample}_model.r"
+
+    params:
+        name="{sample}"
+
+    shell:
+        """
+        macs2 callpeak -t {input.bam_sorted} -c {input.bam_input} -g hs -f BAM --bdg --name {params.name} --outdir macs2_/
+        """
+
+
+
+
+rule sort_bedgraph:
+    input:
+        pileup_bdg="PATH/chip_seq/macs2_/{sample}_treat_pileup.bdg"
+
+    output:
+        bedgraph_sorted="PATH/chip_seq/{sample}_treat_pileup.bedGraph"
+
+    params:
+        chromsizes="PATH/chip_seq/mm9.chrom.sizes" 
+
+    shell:
+        """
+        sort {input.pileup_bdg} --temporary-directory=PATH/ -k1,1 -k2,2n > {output.bedgraph_input}
+        """
+
+rule make_bigwig:
+    input:
+        bedgraph_sorted="PATH/chip_seq/{sample}_treat_pileup.bedGraph"
+
+    output:
+        bw_files="PATH/chip_seq/{sample}_MAPQ10.bwig"
+
+    params:
+        chromsizes="PATH/chip_seq/mm9.chrom.sizes" 
+
+    shell:
+        """
+        /PATH/bedGraphToBigWig -unc {input.bedgraph_sorted} {params.chromsizes} {output.bw_files} 
+        """
