@@ -1,0 +1,54 @@
+LINE_SAMPLES = ["L1MdA_5100_5300", "L1MdA_5300_5500", "L1MdA_5500_5700", "L1MdA_5700_5900", "L1MdA_5900_6100", "L1MdA_6100_6300", "L1MdA_6300_6500", "L1MdA_6500_6700", "L1MdA_6700_6900", "L1MdA_6900_7100"]
+
+
+
+with open("/{PATH}/single_end.txt", "r") as file_:
+    BW_SAMPLES  = file_.read().splitlines()
+
+
+rule all:
+    input:
+        expand("/{PATH}/heatmaps/{line_sample}_{bwig_sample}_heatmap.png", line_sample = LINE_SAMPLES, bwig_sample = BW_SAMPLES)
+
+
+rule computeM_esos25:
+    input:
+        esos25="/{PATH}/ES-OS25_all_output.bwig",
+        sample_files="/{PATH}/bed_files/{line_sample}.bed"
+
+    output:
+        gz_output_esos25="/{PATH}/matrix_files/{line_sample}_matrix.gz"
+
+    shell:
+        """
+        computeMatrix reference-point -S {input.esos25} -R {input.sample_files} -b 500 -a 1500 --averageTypeBins "mean" -o {output.gz_output_esos25}
+        """
+
+rule computeM:
+    input:
+        bed_files="/{PATH}/bed_files/{line_sample}.bed",
+        bwig_files="/{PATH}/{bwig_sample}.bwig"
+
+    output:
+        gz_output="/{PATH}/matrix_files/{line_sample}_{bwig_sample}_matrix.gz"
+
+    shell:
+        """
+        computeMatrix reference-point -S {input.bwig_files} -R {input.bed_files} -b 500 -a 1500 --averageTypeBins "mean" -o {output.gz_output}
+        """
+
+
+rule plotMatrix:
+    input:
+        gz_output="/{PATH}/matrix_files/{line_sample}_{bwig_sample}_matrix.gz"
+        
+    output:
+        heatmap="/{PATH}/heatmaps/{line_sample}_{bwig_sample}_heatmap.png"
+
+    params:
+        line_title="{line_sample}"
+    
+    shell:
+        """
+        plotHeatmap -m {input.gz_output} --averageType "median" -T {params.line_title} --whatToShow 'heatmap and colorbar' -out {output.heatmap}
+        """
