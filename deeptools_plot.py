@@ -1,9 +1,9 @@
 #!/bin/python3
 
+import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
-import os
 
 
 SAMPLES = ["active_L1Md_A", "active_L1Md_T", "inactive_L1Md_A", "inactive_L1Md_T"]
@@ -12,8 +12,7 @@ PATH = os.getcwd()
 
 
 class PlotMatrix:
-    
-    
+    """Plot matrix files from deeptools output"""
     def __init__(self, name, dataset):
         self.name = name
         self.dataset = dataset
@@ -24,6 +23,7 @@ class PlotMatrix:
 
 
     def input_data(self):
+        """Read matrix file"""
         self.data = pd.read_csv(f"{PATH}{self.dataset}", "\t", skiprows = 1)
         self.subset = self.data.iloc[0:,6:]
         self.row_mean = list(self.subset.mean(axis = 0))
@@ -35,14 +35,17 @@ class PlotMatrix:
         self.ul.append(self.uci)
         self.ll.append(self.lci)
         return self.linspaces[0], self.lines[0], self.ul[0], self.ll[0]
-    
+
     def plot_mean(self):
+        """Plot mean"""
         return ax2.plot(self.input_data()[0], self.input_data()[1], label = self.name, linewidth = 3, color = self.line_color)
-        
+
     def plot_uci(self):
+        """Plot upper confidence interval"""
         return ax2.plot(self.input_data()[0], self.input_data()[2], linewidth = 1, linestyle = "dashed", color = self.line_color)
-    
+
     def plot_lci(self):
+        """Plot lower confidence interval"""
         return ax2.plot(self.input_data()[0], self.input_data()[3], linewidth = 1, linestyle = "dashed", color = self.line_color)
 
 
@@ -57,6 +60,7 @@ for sample in SAMPLES:
     ax.set_ylim(0, 5)
     ax.set_ylabel("CAGE signal")
     plt.locator_params(axis = "x", nbins = 3)
+
     # Plot other metrics on the Y-axis
     wt_h2az = PlotMatrix("WT-H2AZ", f"{sample}_wt-h2az_s8_matrix")
     ax2.plot(wt_h2az.input_data()[0], wt_h2az.input_data()[1], label = "WT-H2AZ" , linewidth = 3, color = "deeppink")
@@ -69,14 +73,3 @@ for sample in SAMPLES:
     plt.title(f"{sample}", size =  20)
     ax.legend(h1+h2, l1+l2, loc = "upper right")
     plt.savefig(f"{PATH}{sample}.png")
-
-
-
-
-
-
-
-
-
-
-
