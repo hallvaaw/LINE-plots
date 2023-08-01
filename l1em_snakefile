@@ -1,0 +1,190 @@
+threads = 16  # How many threads to use for samtools, bwa, and L1EM
+realignNM = 2  # Number of mismatches allowed in bwa realignment
+L1EM_NM = 2  # Number of mismatches allowed when enumerated candidate alignments
+NMdiff = 1  # Skip candidate alignments with greater than this many more mismatches than the best alignment
+bwa_i = 20  # bwa i parameter prevents indels near the edges of a read
+error_prob = 0.01  # Probability of a read error at a given position
+max_start2start_len = 500  # Max allowed template/fragment length
+reads_per_pickle = 10000  # Number of rows in each G(R) matrix chunk. Decrease if memory usage is too high.
+EM_threshold = 1e-6  # Keep taking EM steps until no entry in X changes by more than this value. Increasing this parameter will shorten run time.
+template_fraction = 1  # Fraction of reads to consider when calculating median template length.
+
+# Paths and directories
+WORKDIR = os.getcwd()  # Working directory
+L1EM_directory = "/data/hallvaaw/rna_seq/L1EM"  # NB! MUST BE HARDCODED
+mm39 = "/data/hallvaaw/rna_seq/mm39.fa"  # NB! MUST BE HARDCODED
+
+# BAMFILES
+with open("/data/hallvaaw/rna_seq/paired_end.txt", "r") as file_:
+    BAMFILES = file_.read().splitlines()
+
+
+rule realign_1:
+    input:
+        bam="/data/hallvaaw/rna_seq/{bamfile}_sorted.bam"
+    output:
+        unaligned_1="/data/hallvaaw/rna_seq/L1EM/idL1reads/{bamfile}_unaligned.fq1",
+        unaligned_2="/data/hallvaaw/rna_seq/L1EM/idL1reads/{bamfile}_unaligned.fq2"
+    shell:
+        """
+        echo 'STEP 1: realign'
+        export PATH=/software/bwa/0.7.17/bin:$PATH
+        export PATH=/software/miniconda2/bin:$PATH
+        export PATH=/data/hallvaaw/software/miniconda3/include:/data/hallvaaw/software/miniconda3/bin:/data/common/software/bin:$PATH
+        samtools view -@ {threads} -b -F 2 {input.bam} | samtools sort -@ {threads} -n - | samtools fastq - -1 {output.unaligned_1} -2 {output.unaligned_2}
+        """
+
+rule realign_2:
+    input:
+        unaligned_1="/data/hallvaaw/rna_seq/L1EM/idL1reads/{bamfile}_unaligned.fq1",
+        unaligned_2="/data/hallvaaw/rna_seq/L1EM/idL1reads/{bamfile}_unaligned.fq2"
+    output:
+        sai1="/data/hallvaaw/rna_seq/L1EM/idL1reads/{bamfile}_1.sai",
+        sai2="/data/hallvaaw/rna_seq/L1EM/idL1reads/{bamfile}_2.sai"
+    shell:
+        """
+        bwa aln -k {realignNM} -n {realignNM} -t {threads} -i {bwa_i} {mm39} {input.unaligned_1} > {output.sai1}
+        bwa aln -k {realignNM} -n {realignNM} -t {threads} -i {bwa_i} {mm39} {input.unaligned_2} > {output.sai2}
+        """
+
+rule realign_3:
+    input:
+        unaligned_1="/data/hallvaaw/rna_seq/L1EM/idL1reads/{bamfile}_unaligned.fq1",
+        unaligned_2="/data/hallvaaw/rna_seq/L1EM/idL1reads/{bamfile}_unaligned.fq2",
+        sai1="/data/hallvaaw/rna_seq/L1EM/idL1reads/{bamfile}_1.sai",
+        sai2="/data/hallvaaw/rna_seq/L1EM/idL1reads/{bamfile}_2.sai"
+    output:
+        realigned="/data/hallvaaw/rna_seq/L1EM/idL1reads/{bamfile}_realigned.bam",
+        realigned_index="/data/hallvaaw/rna_seq/L1EM/idL1reads/{bamfile}_realigned.bam.bai"
+    shell:
+        """
+        bwa sampe {mm39} {input.sai1} {input.sai2} {input.unaligned_1} {input.unaligned_2} | samtools view -b -@ {threads} - | samtools sort -@ {threads} - > {output.realigned}
+        samtools index {output.realigned} {output.realigned_index}
+        """
+
+rule extract_1:
+    input:
+        bamfile="/data/hallvaaw/rna_seq/{bamfile}_sorted.bam",
+        realigned="/data/hallvaaw/rna_seq/L1EM/idL1reads/{bamfile}_realigned.bam"
+    output:
+        input_temp="/data/hallvaaw/rna_seq/L1EM/idL1reads/{bamfile}_input_temp.bam",
+        realigned_temp="/data/hallvaaw/rna_seq/L1EM/idL1reads/{bamfile}_realigned_temp.bam"
+    shell:
+        """
+        # Extract L1Md* aligning reads.
+        echo 'STEP 2: extract'
+        python {L1EM_utilities_dir}read_or_pair_overlap_bed.py {L1EM_bed} {input.bamfile} {output.input_temp}
+        python {L1EM_utilities_dir}read_or_pair_overlap_bed.py {L1EM_bed} {input.realigned} {output.realigned_temp}
+        """
+
+rule extract_2:
+    input:
+        input_temp="/data/hallvaaw/rna_seq/L1EM/idL1reads/{bamfile}_input_temp.bam",
+        realigned_temp="/data/hallvaaw/rna_seq/L1EM/idL1reads/{bamfile}_realigned_temp.bam"
+    output:
+        L1_1="/data/hallvaaw/rna_seq/L1EM/idL1reads/{bamfile}_L1.fq1",
+        L1_2="/data/hallvaaw/rna_seq/L1EM/idL1reads/{bamfile}_L1.fq2"
+    shell:
+        """
+        samtools sort -@ {threads} -n {input.input_temp} | samtools fastq - -1 {output.L1_1} -2 {output.L1_2}
+        samtools sort -@ {threads} -n {input.realigned_temp} | samtools fastq - -1 temp.fq1 -2 temp.fq2
+        cat temp.fq1 >> {output.L1_1}
+        cat temp.fq2 >> {output.L1_2}
+        rm temp*
+        """
+
+rule split_fq_files:
+    input:
+        L1_1="/data/hallvaaw/rna_seq/L1EM/idL1reads/{bamfile}_L1.fq1",
+        L1_2="/data/hallvaaw/rna_seq/L1EM/idL1reads/{bamfile}_L1.fq2"
+    output:
+        L1_1="/data/hallvaaw/rna_seq/L1EM/split_fqs/{bamfile}_L1.fq1",
+        L1_2="/data/hallvaaw/rna_seq/L1EM/split_fqs/{bamfile}_L1.fq2"
+    shell:
+        """
+        # Split the L1 fastq files for parallel execution
+        n_threads={threads}
+        n_lines=$(wc -l {input.L1_1})
+        split_fq_size=$($n_lines/$n_threads*10*4+1 | cut -d '.' -f 1 | awk '{print $1*4}')
+        split_fq_size=$(wc -l {input.L1_1} | awk '{{print $1/('{threads}'*10*4)+1}}' | cut -d '.' -f 1 | awk '{{print $1*4}}')
+        echo $split_fq_size
+        """
+
+rule candidate_alignments:
+    output:
+        dynamic("/data/hallvaaw/rna_seq/L1EM/split_fqs/")
+    shell:
+        """
+        # Generate candidate alignments
+        echo 'STEP 3: candidate alignments'
+        for name in /data/hallvaaw/rna_seq/L1EM/split_fqs/*.fq1.*
+        do
+            reads1=$name
+            reads2=$(echo $name|sed 's/fq1/fq2/g')
+            ref={L1EM_fa}
+            base=$(echo $name|sed 's/.fq1//g')
+            bwa aln -t {threads} -N -n {L1EM_NM} -k {L1EM_NM} -i {bwa_i} -R 10000000 {ref} $reads1 > {output}$base.R1.aln.sai
+            bwa aln -t {threads} -N -n {L1EM_NM} -k {L1EM_NM} -i {bwa_i} -R 10000000 {ref} $reads2 > {output}$base.R2.aln.sai
+            bwa sampe -n 10000000 -N 10000000 $ref {output}$base.R1.aln.sai {output}$base.R2.aln.sai $reads1 $reads2 > {output}temp.$base.aln.sam
+            samtools view -@ {threads} -bS {output}temp.$base.aln.sam > {output}temp.$base.aln.bam
+            samtools sort -@ {threads} -n {output}temp.$base.aln.bam > {output}$base.aln.bam
+#            rm temp.$base.aln.sam temp.$base.aln.bam $base.R1.aln.sai $base.R2.aln.sai
+        done
+        """
+
+rule matrix_construction:
+    input:
+        bam="/data/hallvaaw/rna_seq/{bamfile}_sorted.bam"
+    output:
+        baminfo="/data/hallvaaw/rna_seq/L1EM/G_of_R/{bamfile}_baminfo.txt",
+        bamlist_1="/data/hallvaaw/rna_seq/L1EM/{bamfile}_bamlist_1.txt",
+        bamlist_2="/data/hallvaaw/rna_seq/L1EM/{bamfile}_bamlist_2.txt",
+        g_of_r_list="/data/hallvaaw/rna_seq/L1EM/{bamfile}_G_of_R_list.txt",
+        te_list="/data/hallvaaw/rna_seq/L1EM/{bamfile}_TE_list.txt"
+    shell:
+        """
+        # Make G_of_R matrix
+        echo 'STEP 4: G(R) matrix construction'
+        python {L1EM_CGC_dir}median_template_and_pairs.py {input.bam} 0.001 > {output.baminfo}
+        medianinsert=$(head -1 {output.baminfo})
+        ls /data/hallvaaw/rna_seq/L1EM/split_fqs/*.bam > {output.bamlist_1}
+        split -l {threads} {output.bamlist_1} {output.bamlist_2}
+        for bamlist in {output.bamlist_2}*
+            do for bamfile in $(cat $bamlist)
+                do python {L1EM_code_dir}G_of_R.py -b /data/hallvaaw/rna_seq/L1EM/split_fqs/$bamfile -i $medianinsert -p $(echo $bamfile| cut -d '/' -f 3) -e {error_prob} -m {max_start2start_len} -r {reads_per_pickle} -n {NMdiff} &
+            done
+            wait
+        done
+        ls /data/hallvaaw/rna_seq/L1EM/G_of_R/*pk2 > {output.g_of_r_list}
+        cp $(ls /data/hallvaaw/rna_seq/L1EM/G_of_R/*TE_list.txt | head -1) {output.te_list}
+        """
+
+rule run_em_2:
+    input:
+        g_of_r_list="/data/hallvaaw/rna_seq/L1EM/{bamfile}_G_of_R_list.txt",
+        te_list="/data/hallvaaw/rna_seq/L1EM/{bamfile}_TE_list.txt"
+    output:
+    shell:
+        """
+        # RUN EM
+        python {L1EM_code_dir}L1EM.py -g {input.g_of_r_list} -l {input.te_list} -t {threads} -s {EM_threshold}
+        """
+
+rule write_results:
+    input:
+        baminfo="/data/hallvaaw/rna_seq/L1EM/G_of_R/{bamfile}_baminfo.txt"
+    output:
+        baminfo_final="/data/hallvaaw/rna_seq/L1EM/G_of_R/{bamfile}_baminfo_final.txt",
+        full_counts="/data/hallvaaw/rna_seq/L1EM/{bamfile}_full_counts.txt",
+        filter_active="/data/hallvaaw/rna_seq/L1EM/{bamfile}_filter_active_L1Md_FPM.txt",
+        names_final="/data/hallvaaw/rna_seq/L1EM/{bamfile}_names_final.pkl",
+        x_final="/data/hallvaaw/rna_seq/L1EM/{bamfile}_X_final.pkl"
+    shell:
+        """
+        # Write results as a text file
+        echo 'STEP 6: Writing results'
+
+        python {L1EM_utilities_dir}L1EM_readpairs.py >> {output.baminfo_final}
+        python {L1EM_utilities_dir}report_l1_exp_counts.py > {output.full_counts}
+        python {L1EM_utilities_dir}filtered_and_normalized_active_l1md.py {output.filter_active} {output.x_final} $(head -2 {input.baminfo} | tail -1) $(head -3 {input.baminfo} | tail -1)> {output.filter_active}
+        """
