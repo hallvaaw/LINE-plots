@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div style="width: 80%; margin: 0 auto;">
+    <canvas id="scatterChart"></canvas>
+  </div>
+
+  <script>
+
+    const dataGroups = [
+      { group: 'Group 1', data: [5, 3, 8] },
+      { group: 'Group 2', data: [6, 1, 2] },
+      { group: 'Group 3', data: [3, 6, 3] },
+      { group: 'Group 4', data: [1, 3, 1] },
+      { group: 'Group 5', data: [2, 2, 5] },
+    ];
+
+    const labels = ['', 'Data A', 'Data B', 'Data C'];
+
+    // Function to add jitter
+    function addJitter(value) {
+      const jitterFactor = 0.2;
+      return value + (Math.random() - 0.5) * jitterFactor;
+    }
+
+    const datasets = dataGroups.map((dataGroup, index) => {
+      return {
+        label: dataGroup.group,
+        data: dataGroup.data.map((value, idx) => ({ x: addJitter(idx), y: value })),
+        backgroundColor: [
+      	    'rgba(255, 99, 132, 1)',
+      	    'rgba(255, 159, 64, 1)',
+      	    'rgba(255, 205, 86, 1)'],
+        pointRadius: 8,
+        pointHoverRadius: 10,
+        showLine: false,
+      };
+    });
+
+    const ctx = document.getElementById('scatterChart').getContext('2d');
+    const scatterChart = new Chart(ctx, {
+      type: 'scatter',
+      data: {
+        labels: labels,
+        datasets: datasets,
+      },
+      options: {
+        scales: {
+          x: {
+            type: 'linear',
+            position: 'bottom',
+            beginAtZero: true,
+            ticks: {
+                maxTicksLimit: 6,
+		callback: function (value, index) {
+              	    return labels[index];
+		    }
+            }
+          },
+          y: {
+            beginAtZero: true,
+          },
+        },
+        plugins: {
+          legend: {
+            display: false,
+          },
+        },
+      },
+    });
+  </script>
+</body>
+</html>
