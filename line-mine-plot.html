@@ -11,14 +11,14 @@
   <script>
 
     const dataGroups = [
-      { group: 'Group 1', data: [5, 3, 8] },
-      { group: 'Group 2', data: [6, 1, 2] },
-      { group: 'Group 3', data: [3, 6, 3] },
-      { group: 'Group 4', data: [1, 3, 1] },
-      { group: 'Group 5', data: [2, 2, 5] },
+      { group: 'Epithelial', data: [5, 3, 8] },
+      { group: 'Brain', data: [6, 1, 2] },
+      { group: 'Heart', data: [3, 6, 3] },
+      { group: 'Liver', data: [1, 3, 1] },
+      { group: 'Bone', data: [2, 2, 5] },
     ];
 
-    const labels = ['', 'Data A', 'Data B', 'Data C'];
+    const labels = ['', 'L1MdA', 'L1MdTf', 'L1MdGf'];
 
     // Function to add jitter
     function addJitter(value) {
@@ -55,13 +55,28 @@
             beginAtZero: true,
             ticks: {
                 maxTicksLimit: 6,
-		callback: function (value, index) {
+		        callback: function (value, index) {
               	    return labels[index];
-		    }
+		    },
+                font: {
+                    size: 16
+                }
             }
           },
           y: {
             beginAtZero: true,
+            title: {
+                display: true,
+                text: 'Expression level',
+                font: {
+                    size: 20
+                },
+            },
+            ticks: {
+                font: {
+                    size: 16
+                }
+            },
           },
         },
         plugins: {
