@@ -1,0 +1,36 @@
+
+SAMPLES = ["mm10_L1MdA_5end", "mm10_L1MdTf_5end", "mm10_L1MdGf_5end", "mm10_L1MdF_5end"]
+
+
+rule all:
+    input:
+        expand("{PATH}/line_h2az/unibind/{sample}", sample = SAMPLES)
+
+
+rule bed_1000_ds:
+    input:
+        bed_file = "{PATH}/line_h2az/full_length/bed_files/ext/ds500/{sample}.bed"
+    output:
+        bed_ds = "{PATH}/line_h2az/full_length/bed_files/ext/ds500/{sample}_500ds.bed"
+
+    shell:
+        """
+        python3 {PATH}/deeptools_scripts/bed_file_ds.py {input.bed_file} {output.bed_ds}
+        """
+
+
+rule unibind_enrich:
+    input:
+        bed_file = "{PATH}/line_h2az/bed_files/promoters/unibind/{sample}.bed"
+
+    output:
+        directory("{PATH}/line_h2az/unibind/{sample}")
+
+    params:
+        RDS_file = "{PATH}/unibind/unibind_enrichment/data/mm10_robust_UniBind_LOLA.RDS",
+        background_file = "{PATH}/line_h2az/bed_files/promoters/unibind/mm10_L1Md_5end.bed"
+        
+    shell:
+        """
+        {PATH}/unibind/unibind_enrichment/bin/UniBind_enrich.sh oneSetBg {params.RDS_file} {input.bed_file} {params.background_file} {output}
+        """
