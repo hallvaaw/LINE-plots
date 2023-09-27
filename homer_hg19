@@ -1,0 +1,24 @@
+SAMPLES = ['L1Hs']
+
+rule all:
+    input:
+        expand("/home/hallvaaw/tfbs_homer/{sample}", sample = SAMPLES)
+
+
+rule denovo:
+    input:
+        "/home/hallvaaw/line_h2az/hg19/{sample}_1000ds.bed"
+
+    output:
+        directory("/home/hallvaaw/tfbs_homer/{sample}")
+
+    params:
+        "/home/hallvaaw/line_h2az/hg19/LINEhg19_1000ds.bed"
+
+    shell:
+        """
+        source ~/.zsh_profile
+        findMotifsGenome.pl {input} hg19 {output} -size given -bg {params}
+        """
+
+
